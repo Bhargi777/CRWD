@@ -45,9 +45,16 @@ export async function POST(req: Request) {
     });
 
     if (payment && payment.status === "PENDING") {
+      // Swap the correlation key (order id) for the actual payment id —
+      // that's what Razorpay's refund API takes (lib/actions/admin.ts),
+      // order ids aren't refundable.
       await prisma.payment.update({
         where: { id: payment.id },
-        data: { status: "SUCCEEDED", webhookVerified: true },
+        data: {
+          status: "SUCCEEDED",
+          webhookVerified: true,
+          providerPaymentId: event.payload.payment.entity.id,
+        },
       });
       await activateMembership(payment.id);
     }

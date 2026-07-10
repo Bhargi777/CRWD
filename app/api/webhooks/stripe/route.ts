@@ -30,9 +30,21 @@ export async function POST(req: Request) {
     });
 
     if (payment && payment.status === "PENDING") {
+      // Swap the correlation key (checkout session id) for the PaymentIntent
+      // id, which is what Stripe's refund API actually takes — refunds
+      // (lib/actions/admin.ts) need this, session ids aren't refundable.
+      const paymentIntentId =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id;
+
       await prisma.payment.update({
         where: { id: payment.id },
-        data: { status: "SUCCEEDED", webhookVerified: true },
+        data: {
+          status: "SUCCEEDED",
+          webhookVerified: true,
+          ...(paymentIntentId ? { providerPaymentId: paymentIntentId } : {}),
+        },
       });
       await activateMembership(payment.id);
     }
