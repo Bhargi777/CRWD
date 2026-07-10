@@ -8,7 +8,10 @@ const isProtectedRoute = createRouteMatcher([
 ]);
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
-const isSellerRoute = createRouteMatcher(["/sell(.*)"]);
+// Bare /sell is the onboarding entry point for any authenticated user — only
+// subpaths require an existing seller role. /sell itself checks role server-
+// side and renders onboarding vs. dashboard accordingly.
+const isSellerRoute = createRouteMatcher(["/sell/(.*)"]);
 
 export default clerkMiddleware(async (auth, req) => {
   if (!isProtectedRoute(req)) return;
