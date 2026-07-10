@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  BUYER
+  SELLER
+  ADMIN
+}
+
+enum CommunityStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+  SUSPENDED
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  STRIPE
+  RAZORPAY
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum BillingInterval {
+  one_time
+  monthly
+  yearly
+}
+
+enum Platform {
+  discord
+  slack
+  telegram
+  other
+}
+
+/// Mirrors Clerk user_id — Clerk is source of truth for auth, this table
+/// holds app-level profile/state.
+model User {
+  id        String   @id
+  email     String   @unique
+  name      String?
+  avatarUrl String?  @map("avatar_url")
+  role      UserRole @default(BUYER)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  seller      Seller?
+  memberships Membership[]
+  payments    Payment[]
+  reviews     Review[]
+  wishlists   Wishlist[]
+
+  @@map("users")
+}
+
+model Seller {
+  id            String   @id @default(uuid())
+  userId        String   @unique @map("user_id")
+  user          User     @relation(fields: [userId], references: [id])
+  displayName   String   @map("display_name")
+  bio           String?
+  verified      Boolean  @default(false)
+  payoutDetails Json?    @map("payout_details")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  communities Community[]
+
+  @@map("sellers")
+}
+
+model Community {
+  id              String          @id @default(uuid())
+  sellerId        String          @map("seller_id")
+  seller          Seller          @relation(fields: [sellerId], references: [id])
+  categoryId      String          @map("category_id")
+  category        Category        @relation(fields: [categoryId], references: [id])
+  title           String
+  slug            String          @unique
+  description     String
+  coverImageUrl   String?         @map("cover_image_url")
+  priceCents      Int             @map("price_cents")
+  currency        String
+  billingInterval BillingInterval @map("billing_interval")
+  platform        Platform
+  inviteConfig    Json?           @map("invite_config")
+  memberCount     Int             @default(0) @map("member_count")
+  status          CommunityStatus @default(DRAFT)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  tags        CommunityTag[]
+  memberships Membership[]
+  payments    Payment[]
+  reviews     Review[]
+  wishlists   Wishlist[]
+
+  @@index([status, categoryId])
+  @@map("communities")
+}
+
+model Category {
+  id   String @id @default(uuid())
+  name String @unique
+  slug String @unique
+
+  communities Community[]
+
+  @@map("categories")
+}
+
+model Tag {
+  id   String @id @default(uuid())
+  name String @unique
+
+  communities CommunityTag[]
+
+  @@map("tags")
+}
+
+model CommunityTag {
+  communityId String    @map("community_id")
+  community   Community @relation(fields: [communityId], references: [id])
+  tagId       String    @map("tag_id")
+  tag         Tag       @relation(fields: [tagId], references: [id])
+
+  @@id([communityId, tagId])
+  @@map("community_tags")
+}
+
+model Membership {
+  id          String            @id @default(uuid())
+  userId      String            @map("user_id")
+  user        User              @relation(fields: [userId], references: [id])
+  communityId String            @map("community_id")
+  community   Community         @relation(fields: [communityId], references: [id])
+  paymentId   String?           @unique @map("payment_id")
+  payment     Payment?          @relation(fields: [paymentId], references: [id])
+  status      MembershipStatus  @default(ACTIVE)
+  inviteUrl   String?           @map("invite_url")
+  startsAt    DateTime          @default(now()) @map("starts_at")
+  expiresAt   DateTime?         @map("expires_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  @@unique([userId, communityId])
+  @@index([expiresAt])
+  @@map("memberships")
+}
+
+model Payment {
+  id                 String          @id @default(uuid())
+  userId             String          @map("user_id")
+  user               User            @relation(fields: [userId], references: [id])
+  communityId        String          @map("community_id")
+  community          Community       @relation(fields: [communityId], references: [id])
+  provider           PaymentProvider
+  providerPaymentId  String          @map("provider_payment_id")
+  amountCents        Int             @map("amount_cents")
+  currency           String
+  status             PaymentStatus   @default(PENDING)
+  webhookVerified    Boolean         @default(false) @map("webhook_verified")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  membership Membership?
+
+  @@unique([provider, providerPaymentId])
+  @@map("payments")
+}
+
+model Review {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id])
+  communityId String    @map("community_id")
+  community   Community @relation(fields: [communityId], references: [id])
+  rating      Int
+  body        String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([userId, communityId])
+  @@map("reviews")
+}
+
+model Wishlist {
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id])
+  communityId String    @map("community_id")
+  community   Community @relation(fields: [communityId], references: [id])
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@id([userId, communityId])
+  @@map("wishlists")
+}
