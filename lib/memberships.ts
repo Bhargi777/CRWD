@@ -4,7 +4,7 @@ import { sendInviteEmail } from "@/lib/resend";
 import { env } from "@/lib/env";
 import type { BillingInterval } from "@prisma/client";
 
-function computeExpiry(billingInterval: BillingInterval): Date | null {
+export function computeExpiry(billingInterval: BillingInterval): Date | null {
   if (billingInterval === "one_time") return null;
   const expiresAt = new Date();
   if (billingInterval === "monthly") expiresAt.setMonth(expiresAt.getMonth() + 1);

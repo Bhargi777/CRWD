@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { createHmac, timingSafeEqual } from "crypto";
 import { requireEnv } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { activateMembership } from "@/lib/memberships";
+import { verifyRazorpaySignature } from "@/lib/razorpay";
 
 type RazorpayWebhookEvent = {
   event: string;
@@ -13,14 +13,6 @@ type RazorpayWebhookEvent = {
   };
 };
 
-function verifySignature(body: string, signature: string, secret: string): boolean {
-  const expected = createHmac("sha256", secret).update(body).digest("hex");
-  const expectedBuf = Buffer.from(expected);
-  const signatureBuf = Buffer.from(signature);
-  if (expectedBuf.length !== signatureBuf.length) return false;
-  return timingSafeEqual(expectedBuf, signatureBuf);
-}
-
 export async function POST(req: Request) {
   const signature = req.headers.get("x-razorpay-signature");
   if (!signature) {
@@ -30,7 +22,7 @@ export async function POST(req: Request) {
   const body = await req.text();
   const secret = requireEnv("RAZORPAY_WEBHOOK_SECRET");
 
-  if (!verifySignature(body, signature, secret)) {
+  if (!verifyRazorpaySignature(body, signature, secret)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
