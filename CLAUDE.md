@@ -5,11 +5,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project status
 
 CRWD is a marketplace for paid communities: sellers list communities, buyers pay for
-memberships. As of this writing the repo contains **only planning docs** (`PRD.md`,
-`DESIGN.md`, `TECH_SPEC.md`, `SCHEMA.md`, `RULES.md`, `IMPLEMENTATION.md`, `TRACKER.md`,
-`WEBSITE_FLOW.md`) — no application code, no `package.json`, no tooling. The first
-implementation task is scaffolding the Next.js app per the stack below. Until then there
-are no build/lint/test commands.
+memberships. All 11 IMPLEMENTATION.md phases (setup through deployment config) are built
+and pass typecheck/lint/build. What's missing is **live infrastructure** — no
+`DATABASE_URL` and none of the third-party credentials in `.env.example` are provisioned,
+so nothing has run against a real database or been deployed. Every integration
+(`lib/stripe.ts`, `lib/razorpay.ts`, `lib/resend.ts`, `lib/redis.ts`, `lib/pinecone.ts`,
+`lib/gcs.ts`) throws a clear "missing env var" error at call time rather than at import, so
+the app builds and pages render even with zero keys configured — that pattern should be
+followed for any new integration.
+
+Before a real deploy: provision `DATABASE_URL`, run `npx prisma migrate dev --name init`,
+then `npm run db:seed` and `npm run db:enable-search`; set every var in `.env.example` in
+Vercel; point Cloudflare DNS at the Vercel deployment.
+
+## Commands
+
+- `npm run dev` — local dev server
+- `npm run build` / `npm run lint` — must both pass clean before committing
+- `npm test` — Vitest, runs `lib/__tests__/*` (pure logic only, no DB required)
+- `npm run prisma:generate` / `npm run prisma:migrate` — Prisma client / migrations
+- `npm run db:seed` — seeds categories/tags (`prisma/seed.ts`)
+- `npm run db:enable-search` — enables `pg_trgm` + trigram indexes (`prisma/enable-search.ts`);
+  run once against a live DB after the initial migration, not modeled in schema.prisma
+  since Prisma doesn't represent extensions or non-btree index types
+
+`npm run build` prerenders `/`, which needs `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` set (even a
+placeholder) or the build fails — see `ClerkProvider` in `app/layout.tsx`.
 
 ## Stack (TECH_SPEC.md)
 
@@ -33,23 +54,46 @@ are no build/lint/test commands.
 ## Data model (SCHEMA.md)
 
 Core tables: `users`, `sellers`, `communities`, `categories`, `tags`, `community_tags`
-(join), `memberships`, `payments`, `reviews`, `wishlists`. SCHEMA.md has full field-level
-detail (types, FKs, enums, indexes) — use it directly when writing `prisma/schema.prisma`.
+(join), `memberships`, `payments`, `reviews`, `wishlists` — modeled in
+`prisma/schema.prisma`. There is no dedicated reports/disputes table; `/admin/reports`
+(`app/admin/reports/page.tsx`) is scoped to what the schema actually supports (refunds,
+listing suspension) rather than a fabricated table — extend SCHEMA.md first if that needs
+to grow into real report records.
 
-## Core flows (WEBSITE_FLOW.md)
+## Core flows (WEBSITE_FLOW.md) → routes
 
-- Buyer: Guest → Browse → Search → Community → Login → Checkout → Payment → Membership → Invite → Dashboard
-- Seller: Login → Dashboard → Create Listing → Publish → Orders → Analytics
-- Admin: Dashboard → Moderate → Verify → Reports
+- Buyer: `/` → `/browse` or `/search` → `/c/[slug]` → (Clerk sign-in) → `/c/[slug]/checkout`
+  → webhook confirms payment → `/dashboard` (membership + invite link)
+- Seller: `/sell` (onboarding if no seller row yet) → `/sell/listings/new` → submit for
+  review → `/sell/orders`, `/sell/analytics`
+- Admin: `/admin` (moderation) → `/admin/sellers` (verification) → `/admin/reports`
+  (refunds)
+
+`middleware.ts` gates `/dashboard`, `/sell/*` (except bare `/sell`, the onboarding entry
+point), `/admin/*`, and `/c/*/checkout` by Clerk session + role in `publicMetadata`.
+
+## Payment → membership pipeline
+
+Checkout (`lib/actions/checkout.ts`) creates a `PENDING` payment row keyed by the
+provider's session/order id. The corresponding webhook
+(`app/api/webhooks/stripe|razorpay/route.ts`) verifies the signature, flips the payment to
+`SUCCEEDED`, **swaps `provider_payment_id` to the actual refundable id** (Stripe
+PaymentIntent / Razorpay payment id — session/order ids aren't refundable), then calls
+`activateMembership()` (`lib/memberships.ts`), which is idempotent on `payment.id` so
+webhook retries are safe. Admin refunds (`lib/actions/admin.ts`) depend on that id swap
+having happened.
 
 ## Design system (DESIGN.md)
 
 Minimal, spacious, content-first. Inter font, 8px spacing grid, 12px rounded corners,
-soft shadows, thin borders. Light + dark themes with defined token palettes (see
-DESIGN.md for exact hex). Max two primary actions per screen; loading/empty/error states
-on every page.
+soft shadows, thin borders. Light + dark themes via CSS vars in `app/globals.css`, mapped
+to Tailwind v4's `@theme inline`. Shared components in `components/ui/` (`Button`, `Card`,
+`Badge`, `LoadingState`/`EmptyState`/`ErrorState`) — reuse these rather than one-off
+styling; every route has `loading.tsx`/`error.tsx` or an equivalent empty state.
 
 ## Build order (IMPLEMENTATION.md / TRACKER.md)
 
-Setup → Auth → Marketplace → Search → Seller dashboard → Payments → Memberships →
-Reviews → Admin → Testing → Deployment. Update `TRACKER.md` checkboxes as features land.
+All 11 phases (Setup → Auth → Marketplace → Search → Seller dashboard → Payments →
+Memberships → Reviews → Admin → Testing → Deployment config) are complete. See
+`TRACKER.md` for what's still blocked on live infrastructure (DB migration, integration/
+E2E tests, actual deploy).
