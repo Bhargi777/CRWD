@@ -26,6 +26,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
   NEXT_PUBLIC_POSTHOG_HOST: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
+  CRON_SECRET: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { requireEnv } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { activateMembership } from "@/lib/memberships";
 
 type RazorpayWebhookEvent = {
   event: string;
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
         where: { id: payment.id },
         data: { status: "SUCCEEDED", webhookVerified: true },
       });
+      await activateMembership(payment.id);
     }
   }
 

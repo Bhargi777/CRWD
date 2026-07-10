@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { requireEnv } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { activateMembership } from "@/lib/memberships";
 import type Stripe from "stripe";
 
 export async function POST(req: Request) {
@@ -33,6 +34,7 @@ export async function POST(req: Request) {
         where: { id: payment.id },
         data: { status: "SUCCEEDED", webhookVerified: true },
       });
+      await activateMembership(payment.id);
     }
   }
 
