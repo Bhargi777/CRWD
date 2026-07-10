@@ -1,9 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getCommunityBySlug } from "@/lib/communities";
+import { getCurrentAppUser } from "@/lib/auth";
+import { listCommunityReviews, getAverageRating, canUserReview } from "@/lib/reviews";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ReviewForm } from "./_review-form";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +21,17 @@ export default async function CommunityPage({
   if (!community || community.status !== "PUBLISHED") {
     notFound();
   }
+
+  const [reviews, ratingSummary, currentUser] = await Promise.all([
+    listCommunityReviews(community.id),
+    getAverageRating(community.id),
+    getCurrentAppUser(),
+  ]);
+
+  const myReview = currentUser ? reviews.find((r) => r.userId === currentUser.id) : undefined;
+  const eligibleToReview = currentUser
+    ? await canUserReview(currentUser.id, community.id)
+    : false;
 
   const price = (community.priceCents / 100).toLocaleString(undefined, {
     style: "currency",
@@ -51,8 +65,42 @@ export default async function CommunityPage({
         ) : null}
 
         <section>
-          <h2 className="mb-3 text-lg font-semibold">Reviews</h2>
-          <p className="text-sm text-muted-foreground">No reviews yet.</p>
+          <h2 className="mb-3 text-lg font-semibold">
+            Reviews
+            {ratingSummary.count > 0 ? (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                {ratingSummary.average.toFixed(1)} ★ ({ratingSummary.count})
+              </span>
+            ) : null}
+          </h2>
+
+          {eligibleToReview ? (
+            <div className="mb-4">
+              <ReviewForm
+                communityId={community.id}
+                existingRating={myReview?.rating}
+                existingBody={myReview?.body}
+              />
+            </div>
+          ) : null}
+
+          {reviews.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No reviews yet.</p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {reviews.map((review) => (
+                <div key={review.id} className="border-b border-border pb-4 last:border-none">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{review.user.name ?? "Member"}</span>
+                    <span className="text-warning">{"★".repeat(review.rating)}</span>
+                  </div>
+                  {review.body ? (
+                    <p className="mt-1 text-sm text-muted-foreground">{review.body}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </div>
 
