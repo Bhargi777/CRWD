@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { submitReview } from "@/lib/actions/review";
 import { Button } from "@/components/ui/button";
+import posthog from "posthog-js";
 
 export function ReviewForm({
   communityId,
@@ -26,6 +27,12 @@ export function ReviewForm({
     startTransition(async () => {
       try {
         await submitReview({ communityId, rating, body: body || undefined });
+        posthog.capture("review_submitted", {
+          community_id: communityId,
+          rating,
+          is_update: !!existingRating,
+          has_body: !!body,
+        });
         router.refresh();
       } catch {
         setError("Couldn't submit your review.");

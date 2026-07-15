@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireEnv } from "@/lib/env";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 type ClerkUserEvent = {
   type: string;
@@ -51,6 +52,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No primary email" }, { status: 400 });
     }
 
+    const isNew = event.type === "user.created";
+
     await prisma.user.upsert({
       where: { id },
       create: {
@@ -65,6 +68,22 @@ export async function POST(req: Request) {
         avatarUrl: image_url,
       },
     });
+
+    if (isNew) {
+      const posthog = getPostHogClient();
+      posthog.capture({
+        distinctId: id,
+        event: "user_signed_up",
+      });
+      posthog.identify({
+        distinctId: id,
+        properties: {
+          email: primaryEmail.email_address,
+          name: [first_name, last_name].filter(Boolean).join(" ") || undefined,
+        },
+      });
+      await posthog.flush();
+    }
   }
 
   if (event.type === "user.deleted") {

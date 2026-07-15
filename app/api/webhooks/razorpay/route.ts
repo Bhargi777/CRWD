@@ -3,6 +3,7 @@ import { requireEnv } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { activateMembership } from "@/lib/memberships";
 import { verifyRazorpaySignature } from "@/lib/razorpay";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 type RazorpayWebhookEvent = {
   event: string;
@@ -49,15 +50,45 @@ export async function POST(req: Request) {
         },
       });
       await activateMembership(payment.id);
+
+      const posthog = getPostHogClient();
+      posthog.capture({
+        distinctId: payment.userId,
+        event: "payment_succeeded",
+        properties: {
+          provider: "razorpay",
+          community_id: payment.communityId,
+          amount_cents: payment.amountCents,
+          currency: payment.currency,
+        },
+      });
+      await posthog.flush();
     }
   }
 
   if (event.event === "payment.failed") {
     const orderId = event.payload.payment.entity.order_id;
+    const failed = await prisma.payment.findFirst({
+      where: { provider: "RAZORPAY", providerPaymentId: orderId, status: "PENDING" },
+    });
     await prisma.payment.updateMany({
       where: { provider: "RAZORPAY", providerPaymentId: orderId, status: "PENDING" },
       data: { status: "FAILED", webhookVerified: true },
     });
+    if (failed) {
+      const posthog = getPostHogClient();
+      posthog.capture({
+        distinctId: failed.userId,
+        event: "payment_failed",
+        properties: {
+          provider: "razorpay",
+          community_id: failed.communityId,
+          amount_cents: failed.amountCents,
+          currency: failed.currency,
+        },
+      });
+      await posthog.flush();
+    }
   }
 
   return NextResponse.json({ received: true });

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { refundPayment } from "@/lib/actions/admin";
 import { Button } from "@/components/ui/button";
+import posthog from "posthog-js";
 
 export function RefundButton({ paymentId }: { paymentId: string }) {
   const router = useRouter();
@@ -15,6 +16,7 @@ export function RefundButton({ paymentId }: { paymentId: string }) {
     startTransition(async () => {
       try {
         await refundPayment(paymentId);
+        posthog.capture("refund_issued", { payment_id: paymentId });
         router.refresh();
       } catch {
         setError("Refund failed.");
