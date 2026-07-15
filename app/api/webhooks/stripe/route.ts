@@ -3,6 +3,7 @@ import { getStripe } from "@/lib/stripe";
 import { requireEnv } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { activateMembership } from "@/lib/memberships";
+import { getPostHogClient } from "@/lib/posthog-server";
 import type Stripe from "stripe";
 
 export async function POST(req: Request) {
@@ -47,11 +48,31 @@ export async function POST(req: Request) {
         },
       });
       await activateMembership(payment.id);
+
+      const posthog = getPostHogClient();
+      posthog.capture({
+        distinctId: payment.userId,
+        event: "payment_succeeded",
+        properties: {
+          provider: "stripe",
+          community_id: payment.communityId,
+          amount_cents: payment.amountCents,
+          currency: payment.currency,
+        },
+      });
+      await posthog.flush();
     }
   }
 
   if (event.type === "checkout.session.expired") {
     const session = event.data.object as Stripe.Checkout.Session;
+    const failed = await prisma.payment.findFirst({
+      where: {
+        provider: "STRIPE",
+        providerPaymentId: session.id,
+        status: "PENDING",
+      },
+    });
     await prisma.payment.updateMany({
       where: {
         provider: "STRIPE",
@@ -60,6 +81,20 @@ export async function POST(req: Request) {
       },
       data: { status: "FAILED", webhookVerified: true },
     });
+    if (failed) {
+      const posthog = getPostHogClient();
+      posthog.capture({
+        distinctId: failed.userId,
+        event: "payment_failed",
+        properties: {
+          provider: "stripe",
+          community_id: failed.communityId,
+          amount_cents: failed.amountCents,
+          currency: failed.currency,
+        },
+      });
+      await posthog.flush();
+    }
   }
 
   return NextResponse.json({ received: true });

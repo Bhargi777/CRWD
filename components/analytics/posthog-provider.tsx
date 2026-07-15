@@ -1,23 +1,23 @@
 "use client";
 
 import { useEffect } from "react";
+import { useUser } from "@clerk/nextjs";
 import posthog from "posthog-js";
 
-const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST;
-
-let initialized = false;
-
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
+  const { user, isLoaded } = useUser();
+
   useEffect(() => {
-    if (!POSTHOG_KEY || initialized) return;
-    initialized = true;
-    posthog.init(POSTHOG_KEY, {
-      api_host: POSTHOG_HOST || "https://us.i.posthog.com",
-      capture_pageview: true,
-      person_profiles: "identified_only",
-    });
-  }, []);
+    if (!isLoaded) return;
+    if (user) {
+      posthog.identify(user.id, {
+        email: user.primaryEmailAddress?.emailAddress,
+        name: user.fullName,
+      });
+    } else {
+      posthog.reset();
+    }
+  }, [isLoaded, user]);
 
   return children;
 }

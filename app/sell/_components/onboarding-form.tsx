@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { onboardSeller } from "@/lib/actions/seller";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import posthog from "posthog-js";
 
 export function OnboardingForm() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export function OnboardingForm() {
     startTransition(async () => {
       try {
         await onboardSeller({ displayName, bio: bio || undefined });
+        posthog.capture("seller_onboarded", { has_bio: !!bio });
         router.refresh();
       } catch {
         setError("Couldn't set up your seller profile. Try again.");

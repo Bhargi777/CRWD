@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createStripeCheckoutSession, createRazorpayOrder } from "@/lib/actions/checkout";
 import { Button } from "@/components/ui/button";
+import posthog from "posthog-js";
 
 declare global {
   interface Window {
@@ -38,11 +39,13 @@ export function CheckoutButtons({
 
   function handleStripe() {
     setError(null);
+    posthog.capture("checkout_initiated", { provider: "stripe", community_id: communityId });
     startTransition(async () => {
       try {
         const { redirectUrl } = await createStripeCheckoutSession({ communityId });
         if (redirectUrl) window.location.href = redirectUrl;
       } catch {
+        posthog.capture("checkout_error", { provider: "stripe", community_id: communityId });
         setError("Couldn't start Stripe checkout. Try again.");
       }
     });
@@ -50,6 +53,7 @@ export function CheckoutButtons({
 
   function handleRazorpay() {
     setError(null);
+    posthog.capture("checkout_initiated", { provider: "razorpay", community_id: communityId });
     startTransition(async () => {
       try {
         const order = await createRazorpayOrder({ communityId });
@@ -67,6 +71,7 @@ export function CheckoutButtons({
         });
         razorpay.open();
       } catch {
+        posthog.capture("checkout_error", { provider: "razorpay", community_id: communityId });
         setError("Couldn't start Razorpay checkout. Try again.");
       }
     });

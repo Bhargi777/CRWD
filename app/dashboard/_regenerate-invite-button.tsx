@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { regenerateInviteLink } from "@/lib/actions/membership";
 import { Button } from "@/components/ui/button";
+import posthog from "posthog-js";
 
 export function RegenerateInviteButton({ membershipId }: { membershipId: string }) {
   const router = useRouter();
@@ -12,6 +13,7 @@ export function RegenerateInviteButton({ membershipId }: { membershipId: string 
 
   function handleClick() {
     setError(null);
+    posthog.capture("invite_link_regenerated", { membership_id: membershipId });
     startTransition(async () => {
       try {
         await regenerateInviteLink({ membershipId });

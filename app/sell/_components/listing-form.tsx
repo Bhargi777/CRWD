@@ -6,6 +6,7 @@ import { createCommunity, updateCommunity, submitForReview } from "@/lib/actions
 import { requestCoverImageUpload } from "@/lib/actions/upload";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import posthog from "posthog-js";
 
 type Category = { id: string; name: string };
 type Tag = { id: string; name: string };
@@ -107,8 +108,21 @@ export function ListingForm({
           ? await updateCommunity(existing.id, payload)
           : await createCommunity(payload);
 
+        if (!existing) {
+          posthog.capture("listing_created", {
+            community_id: community.id,
+            platform: payload.platform,
+            billing_interval: payload.billingInterval,
+            price_cents: payload.priceCents,
+          });
+        }
+
         if (thenSubmitForReview) {
           await submitForReview(community.id);
+          posthog.capture("listing_submitted_for_review", {
+            community_id: community.id,
+            platform: payload.platform,
+          });
         }
 
         router.push("/sell");
