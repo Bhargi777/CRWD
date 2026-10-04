@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { PostHogProvider } from "@/components/analytics/posthog-provider";
+import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
 const inter = Inter({
@@ -21,12 +22,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
-      <html lang="en" className={`${inter.variable} h-full antialiased`}>
-        <body className="min-h-full flex flex-col bg-background text-foreground">
-          <PostHogProvider>{children}</PostHogProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+    <html lang="en" className={`${inter.variable} h-full antialiased`}>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
+        <ClerkProvider>
+          <PostHogProvider>
+            <SiteHeader />
+            {children}
+          </PostHogProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }

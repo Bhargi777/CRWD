@@ -16,7 +16,9 @@ followed for any new integration.
 
 Before a real deploy: provision `DATABASE_URL`, run `npx prisma migrate dev --name init`,
 then `npm run db:seed` and `npm run db:enable-search`; set every var in `.env.example` in
-Vercel; point Cloudflare DNS at the Vercel deployment.
+Vercel; point Cloudflare DNS at the Vercel deployment. `SETUP.md` walks through obtaining
+every `.env.example` var one service at a time (Supabase, Clerk, Stripe/Razorpay, Resend,
+Upstash, Pinecone, GCS, PostHog, Sentry) — check it before asking the user for a key.
 
 ## Commands
 
@@ -30,7 +32,9 @@ Vercel; point Cloudflare DNS at the Vercel deployment.
   since Prisma doesn't represent extensions or non-btree index types
 
 `npm run build` prerenders `/`, which needs `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` set (even a
-placeholder) or the build fails — see `ClerkProvider` in `app/layout.tsx`.
+placeholder) or the build fails — see `ClerkProvider` in `app/layout.tsx`. `ClerkProvider`
+wraps `PostHogProvider` inside `<body>` (not outside `<html>`) so `SiteHeader`
+(`components/site-header.tsx`) can call Clerk hooks.
 
 ## Stack (TECH_SPEC.md)
 
@@ -90,6 +94,16 @@ soft shadows, thin borders. Light + dark themes via CSS vars in `app/globals.css
 to Tailwind v4's `@theme inline`. Shared components in `components/ui/` (`Button`, `Card`,
 `Badge`, `LoadingState`/`EmptyState`/`ErrorState`) — reuse these rather than one-off
 styling; every route has `loading.tsx`/`error.tsx` or an equivalent empty state.
+
+## Sentry wiring
+
+Error capture is split across `instrumentation.ts` (`register()` loads
+`sentry.server.config.ts` / `sentry.edge.config.ts` per runtime, `onRequestError` reports
+server errors — all gated on `env.SENTRY_DSN` so it's a no-op with no key),
+`instrumentation-client.ts` (browser init, gated on `NEXT_PUBLIC_SENTRY_DSN`), and
+`app/global-error.tsx` (client error boundary). `next.config.ts` wraps the config with
+`withSentryConfig` for source-map upload, keyed off `SENTRY_AUTH_TOKEN` (only meaningful
+in CI/production builds — `silent: !process.env.CI` keeps local builds quiet without it).
 
 ## Build order (IMPLEMENTATION.md / TRACKER.md)
 
